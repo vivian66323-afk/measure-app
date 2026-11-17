@@ -1,0 +1,10 @@
+*.exe
+*.msi
+*.pdf
+*.pem
+dist/
+dist.zip
+data/
+丈量APP_教學版/
+node_modules/
+.wrangler/

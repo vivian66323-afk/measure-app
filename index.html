@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#12161d">
+<title>丈量APP — 藍牙測距量房平台</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%232e7cf6'/><path d='M14 40h36M14 40v-8M50 40v-8M23 40v-5M32 40v-8M41 40v-5' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/></svg>">
+</head>
+<body>
+
+<!-- file:// 防呆：瀏覽器會擋掉 ES 模組與藍牙，直接雙擊 index.html 一定跑不起來。
+     這段刻意寫成傳統 script（非 module），才能在模組被擋時仍然執行。 -->
+<script>
+if (location.protocol === 'file:') {
+  document.documentElement.innerHTML =
+    '<head><meta charset="utf-8"><title>請用伺服器開啟</title></head><body style="margin:0;height:100vh;display:grid;place-items:center;background:#12161d;color:#e8edf4;font:14px/1.8 \'Noto Sans TC\',\'Microsoft JhengHei\',system-ui,sans-serif">'
+    + '<div style="max-width:560px;padding:28px 32px;border:1px solid #2f3947;border-radius:14px;background:#1a2029">'
+    + '<h2 style="margin:0 0 14px;font-size:19px">請不要直接雙擊 index.html</h2>'
+    + '<p style="margin:0 0 16px;color:#98a4b5">瀏覽器在 <code style="color:#ffd591">file://</code> 下會封鎖 ES 模組、Web Bluetooth 與離線快取，程式無法運作。</p>'
+    + '<p style="margin:0 0 8px;color:#e8edf4"><b>正確開啟方式：</b></p>'
+    + '<p style="margin:0 0 6px;color:#98a4b5">① 雙擊資料夾裡的 <code style="color:#8ff0c4">啟動丈量APP.bat</code></p>'
+    + '<p style="margin:0 0 18px;color:#98a4b5">② 瀏覽器會自動打開 <code style="color:#8ff0c4">http://localhost:5173</code></p>'
+    + '<a href="http://localhost:5173" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#2e7cf6;color:#fff;text-decoration:none;font-weight:600">伺服器已在跑？點此開啟</a>'
+    + '</div></body>';
+}
+</script>
+
+<svg style="display:none">
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10.6 19z"/></symbol>
+  <symbol id="i-wall" viewBox="0 0 24 24"><path d="M3 8h18v3H3zM3 14h18v3H3z"/></symbol>
+  <symbol id="i-walk" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="4" r="2.2"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><path d="M6 21V3h9v18" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12.5" cy="12" r="1.2"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M3 12h18" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-opening" viewBox="0 0 24 24"><path d="M2 9h5v6H2zM17 9h5v6h-5z"/><path d="M8 12h8" stroke="currentColor" stroke-width="2" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-column" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+  <symbol id="i-beam" viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3.5 2.5"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 24 24"><path d="M3 8h4l1.5-2h7L17 8h4v12H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-item" viewBox="0 0 24 24"><path d="M3 11v7M21 11v7M3 13h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 11V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-dim" viewBox="0 0 24 24"><path d="M3 12h18M3 8v8M21 8v8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 5h16M12 5v14M9 19h6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-room" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12h8" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-ble" viewBox="0 0 24 24"><path d="M8 7l8 10-4 3V4l4 3-8 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7H5V3M5 7a9 9 0 1 1-1 8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7h4V3M19 7a9 9 0 1 0 1 8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>丈量APP</div>
+
+  <button class="tb" id="btnProjects">專案</button>
+  <input class="projname" id="projName" title="專案名稱" placeholder="未命名專案">
+
+  <div class="floorbar">
+    <select id="floorSel" title="樓層"></select>
+    <button class="tb icon" id="btnFloorAdd" title="新增樓層">＋</button>
+    <button class="tb icon" id="btnFloorDel" title="刪除樓層">－</button>
+  </div>
+
+  <div class="spacer"></div>
+
+  <button class="tb ble" id="btnBle" title="連線藍牙測距儀">
+    <svg class="ic"><use href="#i-ble"></use></svg><span id="bleLabel">未連線</span>
+  </button>
+  <div class="tb-more" id="tbMore">
+    <button class="tb" id="btnReport">報表</button>
+    <button class="tb" id="btnFs">風水</button>
+    <button class="tb" id="btn3d">3D</button>
+    <button class="tb" id="btnCloud">雲端</button>
+    <button class="tb" id="btnExport">匯出</button>
+    <button class="tb icon" id="btnSettings" title="設定">⚙</button>
+  </div>
+  <!-- 手機上頂列塞不下，次要功能收進這個選單 -->
+  <button class="tb icon only-narrow" id="btnMenu" title="更多">⋯</button>
+</header>
+
+<main class="layout">
+
+  <aside class="toolbar" id="toolbar">
+    <button class="tool active" data-tool="select" title="選取 (V)"><svg class="ic"><use href="#i-select"></use></svg><b>選取</b></button>
+    <button class="tool" data-tool="wall"   title="畫牆 (W)"><svg class="ic"><use href="#i-wall"></use></svg><b>畫牆</b></button>
+    <button class="tool" data-tool="walk"   title="導線量房 (G)"><svg class="ic"><use href="#i-walk"></use></svg><b>導線</b></button>
+    <button class="tool" data-tool="door"   title="門 (D)"><svg class="ic"><use href="#i-door"></use></svg><b>門</b></button>
+    <button class="tool" data-tool="window" title="窗 (N)"><svg class="ic"><use href="#i-window"></use></svg><b>窗</b></button>
+    <button class="tool" data-tool="opening" title="開口/垭口 (O)"><svg class="ic"><use href="#i-opening"></use></svg><b>開口</b></button>
+    <button class="tool" data-tool="column" title="柱/樑 (C)"><svg class="ic"><use href="#i-column"></use></svg><b>柱體</b></button>
+    <button class="tool" data-tool="beam"   title="放置一支樑 (B)"><svg class="ic"><use href="#i-beam"></use></svg><b>樑</b></button>
+    <button class="tool" data-tool="item"   title="家具/構件 (F)"><svg class="ic"><use href="#i-item"></use></svg><b>家具</b></button>
+    <button class="tool" data-tool="photo"  title="現場拍照 (P)"><svg class="ic"><use href="#i-photo"></use></svg><b>拍照</b></button>
+    <button class="tool" data-tool="dim"    title="手動標註 (M)"><svg class="ic"><use href="#i-dim"></use></svg><b>標註</b></button>
+    <button class="tool" data-tool="text"   title="註記 (T)"><svg class="ic"><use href="#i-text"></use></svg><b>註記</b></button>
+    <button class="tool" data-tool="room"   title="房間命名 (R)"><svg class="ic"><use href="#i-room"></use></svg><b>房間</b></button>
+    <div class="tsep"></div>
+    <button class="tool mini" id="btnUndo" title="復原 (Ctrl+Z)"><svg class="ic"><use href="#i-undo"></use></svg></button>
+    <button class="tool mini" id="btnRedo" title="重做 (Ctrl+Y)"><svg class="ic"><use href="#i-redo"></use></svg></button>
+    <button class="tool mini danger" id="btnDel" title="刪除 (Del)"><svg class="ic"><use href="#i-trash"></use></svg></button>
+  </aside>
+
+  <section class="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="hud-left">
+      <div class="chip" id="hintChip">選取模式：點擊圖元進行編輯</div>
+    </div>
+
+    <div class="hud-right">
+      <button class="zbtn" id="btnZoomIn">＋</button>
+      <button class="zbtn" id="btnZoomOut">－</button>
+      <button class="zbtn" id="btnFit" title="全圖">⤢</button>
+      <button class="zbtn" id="btnGrid" title="格線">#</button>
+      <button class="zbtn" id="btnOrtho" title="正交鎖定 (F8)">⊥</button>
+      <button class="zbtn" id="btnTrack" title="自動正交追蹤 (F9)">⌖</button>
+    </div>
+
+    <div class="measure-dock" id="measureDock">
+      <div class="md-head">
+        <span class="md-title">量測</span>
+        <span class="md-live" id="mdLive">—</span>
+      </div>
+      <div class="md-body">
+        <input id="mdInput" inputmode="decimal" placeholder="輸入長度 (公分)">
+        <button class="md-btn" id="mdApply">套用</button>
+        <button class="md-btn ghost" id="mdBack" title="退回上一個點 (Backspace)">↶</button>
+      </div>
+      <div class="md-foot">
+        <button class="md-side" id="mdSide" title="切換牆體長在線的哪一側">
+          <span class="ms-ico">⬓</span><span id="mdSideLabel">靠下</span>
+        </button>
+        <button class="md-side danger off" id="mdDel" title="刪除選取的圖元 (Del)">
+          <svg class="ic" style="width:14px;height:14px"><use href="#i-trash"></use></svg>
+        </button>
+        <label><input type="checkbox" id="mdAuto" checked> 自動套用</label>
+        <span id="mdCount">已測 0 筆</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="inspector" id="inspector">
+    <div class="ins-grip"><span class="bar"></span><button class="ins-close" id="insClose">關閉</button></div>
+    <div class="ins-body" id="insBody">
+      <div class="ins-empty">尚未選取圖元<small>選取一面牆、門窗或房間即可編輯屬性</small></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="statusbar">
+  <span id="stCoord">X 0 · Y 0</span>
+  <span id="stSnap">吸附：開</span>
+  <span id="stScale">1:50</span>
+  <span class="spacer"></span>
+  <span id="stStats">牆 0 · 房間 0 · 面積 0 m²</span>
+  <span id="stSave">已儲存</span>
+</footer>
+
+<div class="modal-root" id="modalRoot" hidden></div>
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
