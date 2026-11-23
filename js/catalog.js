@@ -460,7 +460,10 @@ export function previewSVG(key, px = 56) {
     }
   }
   return `<svg viewBox="${-W / 2} ${-H / 2} ${W} ${H}" width="${px}" height="${px}" preserveAspectRatio="xMidYMid meet">`
-    + `<g transform="scale(1,-1)">${o.join('')}</g></svg>`;
+    + `<g transform="scale(1,-1)">${o.join('')}</g>`
+    // 電器／水路的縮寫字：縮圖上也要有，不然一排圓圈分不出誰是誰
+    + (def.tag ? `<text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-weight="700" fill="#3a342b" font-size="${(Math.max(w, h) * 0.46) / Math.max(1, def.tag.length * 0.72)}">${def.tag}</text>` : '')
+    + '</svg>';
 }
 
 export const listByCat = (cat) =>

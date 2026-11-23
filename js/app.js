@@ -59,7 +59,7 @@ async function boot() {
   ed.autoDims = DB.pref.get('autoDims', true);
   ed.precision = DB.pref.get('precision', 5);
   ed.addEventListener('polar', () => { $('#stSnap').textContent = polarStatus(); });
-  wireTopbar(); wireToolbar(); wireStage(); wireKeys(); wireMeter(); wireDock();
+  wireTopbar(); wireToolbar(); wireStage(); wireKeys(); wireMeter(); wireDock(); wireShell();
   refreshFloors(); renderInspector(); updateStats(); updateHint(); updateSideBtn();
   $('#projName').value = doc.p.name;
   ed.fit();
@@ -110,7 +110,7 @@ function wireTopbar() {
   $('#btnFs').onclick = openFengshui;
   $('#btnCloud').onclick = openCloud;
   $('#btnMenu').onclick = openMoreMenu;
-  $('#insClose').onclick = () => $('#inspector').classList.remove('open');
+  $('#insClose').onclick = () => { insOpen = false; $('#inspector').classList.remove('open'); renderSidePanel(); };
   // 轉向或視窗大小改變時，抽屜／固定面板要跟著切換
   window.addEventListener('resize', () => { renderInspector(); ed.resize(); });
   $('#btn3d').onclick = open3d;
@@ -179,6 +179,222 @@ function openGestureHelp() {
 function refreshFloors() {
   const s = $('#floorSel');
   s.replaceChildren(...doc.p.floors.map((f, i) => el('option', { value: i, selected: i === doc.floorIdx }, f.name)));
+}
+
+
+/* ── 操作介面外殼：情境功能鈕、構件庫、量測鍵盤、尺寸提示 ──────────
+   互動方式參考現場量房軟體常見的排法：整張畫布，控制項浮在四周。
+   這裡只做「介面接線」，實際的繪圖邏輯都還是 editor.js 那一套。 */
+let insOpen = false;          // 屬性面板是否展開（改成手動開，不再一選取就彈出）
+let dockPinned = false;       // 使用者手動把量測面板叫出來
+let dockMode = 'len';         // 量測面板目前在改「長度」還是「牆厚」
+let libCat = '結構';
+
+const DRAW_TOOLS = ['wall', 'walk', 'door', 'window', 'opening', 'column', 'item', 'photo', 'dim', 'text', 'room'];
+const TOOL_NAME = { wall: '畫牆', walk: '導線量房', door: '門', window: '窗', opening: '開口', column: '柱體', item: '構件', photo: '拍照', dim: '標註', text: '註記', room: '房間命名' };
+
+/** 構件庫的分類：前面幾類是工具，其餘直接取自圖庫 */
+const LIB_TOOLS = {
+  結構: [['wall', '畫牆', 'i-wall'], ['walk', '導線量房', 'i-walk']],
+  門窗: [['door', '門', 'i-door'], ['window', '窗', 'i-window'], ['opening', '開口', 'i-opening']],
+  樑柱: [['column', '柱體', 'i-column'], ['beam', '樑', 'i-beam']],
+  標註: [['dim', '尺寸標註', 'i-dim'], ['text', '文字註記', 'i-text'], ['room', '房間命名', 'i-room'], ['photo', '現場拍照', 'i-photo']],
+};
+const LIB_CATS = ['結構', '門窗', '樑柱', '電器', '水路', '樓梯', '客廳', '臥室', '廚房', '衛浴', '收納', '建築', '標註'];
+
+function pickTool(t) {
+  ed.setTool(t);
+  selectToolBtn(ed.tool);
+}
+
+function openLib(open = true) {
+  $('#libSheet').classList.toggle('open', open);
+  if (open) renderLib();
+}
+
+function renderLib() {
+  $('#libTabs').replaceChildren(...LIB_CATS.map((c) => el('button', {
+    class: c === libCat ? 'on' : '',
+    onclick: () => { libCat = c; renderLib(); },
+  }, c)));
+  const tools = LIB_TOOLS[libCat];
+  const cards = tools
+    ? tools.map(([t, name, icon]) => el('button', {
+      class: 'lib-card' + (ed.tool === t ? ' on' : ''),
+      onclick: () => { openLib(false); pickTool(t); },
+    }, el('div', { class: 'pv', html: `<svg class="ic"><use href="#${icon}"></use></svg>` }), el('span', {}, name)))
+    : listByCat(libCat).map((d) => el('button', {
+      class: 'lib-card' + (ed.tool === 'item' && d.key === ed.itemType ? ' on' : ''),
+      title: `${d.name}  ${d.w}×${d.h} mm`,
+      onclick: () => {
+        ed.itemType = d.key;
+        openLib(false); pickTool('item');
+        toast(`已選「${d.name}」，在圖面上點一下放置（靠近牆會自動貼齊）`, '', 3000);
+      },
+    }, el('div', { class: 'pv', html: previewSVG(d.key, 50) }), el('span', {}, d.name)));
+  $('#libGrid').replaceChildren(...cards);
+}
+
+/** 右側情境功能鈕 */
+function renderSidePanel() {
+  const btn = (icon, label, fn, cls = '') => el('button', { class: 'sp-btn ' + cls, onclick: fn }, el('i', {}, icon), label);
+  const sep = () => el('div', { class: 'sp-sep' });
+  const sel = ed.sel, e = sel ? ed.entity(sel) : null;
+  const kids = [];
+  const showProps = () => { insOpen = true; renderInspector(); };
+
+  if (DRAW_TOOLS.includes(ed.tool)) {
+    // 正在畫：只留畫圖當下用得到的
+    kids.push(
+      btn('⊥', '正交', () => { $('#btnOrtho').click(); renderSidePanel(); }, ed.ortho ? 'on' : ''),
+      btn('⌖', '追蹤', () => { $('#btnTrack').click(); renderSidePanel(); }, ed.tracking ? 'on' : ''),
+      btn('↶', '退一步', () => { ed.undoPoint(); renderInspector(); updateSideBtn(); }),
+      sep(),
+      btn('✓', '完成', () => pickTool('select')),
+    );
+  } else if (e) {
+    kids.push(btn('☰', '屬性', showProps, insOpen ? 'on' : ''));
+    if (sel.kind === 'wall') kids.push(btn('⬓', '換邊', () => { ed.flipSide(); updateSideBtn(); renderInspector(); }));
+    if (sel.kind === 'opening' && e.kind === 'door') {
+      kids.push(
+        btn('⇅', '內外', () => upd(() => { e.flip = !e.flip; }, '門翻面')),
+        btn('⇄', '左右', () => upd(() => { e.swing = e.swing >= 0 ? -1 : 1; }, '門開向')),
+      );
+    }
+    if (sel.kind === 'item' || sel.kind === 'beam') {
+      kids.push(btn('↻', '轉 90°', () => upd(() => {
+        if (sel.kind === 'item') e.rot = G.normAngle((e.rot || 0) - Math.PI / 2);
+        else { const c = G.lerp(e.a, e.b, 0.5); e.a = G.add(c, G.rot(G.sub(e.a, c), Math.PI / 2)); e.b = G.add(c, G.rot(G.sub(e.b, c), Math.PI / 2)); }
+      }, '旋轉')));
+    }
+    kids.push(sep(),
+      btn('🗑', '刪除', () => { ed.deleteSel(); renderInspector(); }, 'danger'),
+      btn('✕', '取消', () => ed.select(null)));
+  } else {
+    kids.push(
+      btn('⚙', '設定', openSettings),
+      btn('▦', '樓層', () => { insOpen = !insOpen; renderInspector(); renderSidePanel(); }, insOpen ? 'on' : ''),
+      btn('▧', '底圖', () => (doc.floor.underlay ? showProps() : importUnderlay())),
+      btn('◐', '顯示', () => $('.hud-right').classList.toggle('open')),
+      btn('⤢', '全圖', () => ed.fit()),
+      sep(),
+      btn('ᛒ', '測距儀', openBle),
+    );
+  }
+  $('#sidePanel').replaceChildren(...kids);
+  $('#fabWall').classList.toggle('on', ed.tool === 'wall');
+  const done = $('#fabDone');
+  done.hidden = !DRAW_TOOLS.includes(ed.tool);
+  done.textContent = `完成${TOOL_NAME[ed.tool] ? '・' + TOOL_NAME[ed.tool] : ''}`;
+}
+
+/** 上方中央的尺寸提示：畫的時候是長度與角度，選取時是那個物件的尺寸 */
+function updateDimPill() {
+  const pill = $('#dimPill');
+  const u = getUnit();
+  let t = '';
+  const a = ed.draft?.anchor;
+  if (a && (ed.tool === 'wall' || ed.tool === 'dim')) {
+    const p = ed.snapPt || ed.mouse;
+    const d = G.dist(a, p);
+    if (d > 1) {
+      let ang = G.deg(Math.atan2(p.y - a.y, p.x - a.x));
+      if (ang < 0) ang += 360;
+      t = `${fmtLen(d)} ${u}　${ang.toFixed(0)}°`;
+    }
+  } else if (ed.sel) {
+    const e = ed.entity(ed.sel), k = ed.sel.kind;
+    if (e && k === 'wall') t = `長 ${fmtLen(G.dist(e.a, e.b))}　厚 ${fmtLen(e.thickness)}　高 ${fmtLen(doc.floor.height)} ${u}`;
+    else if (e && k === 'opening') t = `寬 ${fmtLen(e.width)}　高 ${fmtLen(e.height)}${e.kind === 'window' ? `　窗台 ${fmtLen(e.sill)}` : ''} ${u}`;
+    else if (e && k === 'item') t = `${fmtLen(e.w)} × ${fmtLen(e.h)} × ${fmtLen(e.h3d)} ${u}`;
+    else if (e && k === 'column') t = `${fmtLen(e.w)} × ${fmtLen(e.h)} ${u}`;
+    else if (e && k === 'beam') t = `長 ${fmtLen(G.dist(e.a, e.b))}　寬 ${fmtLen(e.width)}　樑下 ${fmtLen(e.clearH)} ${u}`;
+    else if (e && k === 'room') t = `${fmt(toM2(e.area), 2)} m²　${fmt(toPing(toM2(e.area)), 2)} 坪`;
+  }
+  if (pill.textContent !== t) pill.textContent = t;
+  pill.hidden = !t;
+}
+
+/** 量測面板：畫牆、導線，或選到可以改尺寸的東西時自動出現 */
+function updateDockVis() {
+  const k = ed.sel?.kind;
+  const auto = ['wall', 'walk'].includes(ed.tool) || ['wall', 'opening', 'beam'].includes(k);      // 家具、插座這類選到時不自動跳鍵盤，要改尺寸再按左下的鈕
+  const dock = $('#measureDock');
+  dock.classList.toggle('hidden', !(auto || dockPinned));
+  $('#fabMeasure').classList.toggle('on', !dock.classList.contains('hidden'));
+
+  // 「牆厚」分頁只有選到牆才有意義
+  const canThick = k === 'wall';
+  if (!canThick && dockMode === 'thick') dockMode = 'len';
+  $$('#mdTabs button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.m === dockMode);
+    b.style.display = b.dataset.m === 'thick' && !canThick ? 'none' : '';
+  });
+  const e = ed.sel ? ed.entity(ed.sel) : null;
+  const cur = !e ? null
+    : dockMode === 'thick' ? e.thickness
+      : k === 'wall' || k === 'beam' ? G.dist(e.a, e.b)
+        : k === 'opening' ? e.width : k === 'item' || k === 'column' ? e.w : null;
+  $('#mdInput').placeholder = cur != null ? `${fmtLen(cur)}（目前）` : `輸入長度 (${getUnit()})`;
+  const first = $('#mdTabs button[data-m="len"]');
+  first.textContent = k === 'opening' || k === 'item' || k === 'column' ? '寬度' : k === 'wall' ? '牆長' : '長度';
+  syncLift();
+}
+
+/** 手機上量測面板貼在底部，右下左下的圓鈕要跟著往上讓 */
+function syncLift() {
+  const dock = $('#measureDock');
+  const narrow = window.innerWidth <= 768;
+  const h = narrow && !dock.classList.contains('hidden') ? dock.offsetHeight : 0;
+  $('.stage').style.setProperty('--lift', h + 'px');
+}
+
+function wireShell() {
+  $('#fabUndo').onclick = () => $('#btnUndo').click();
+  $('#fabRedo').onclick = () => $('#btnRedo').click();
+  $('#fabWall').onclick = () => pickTool(ed.tool === 'wall' ? 'select' : 'wall');
+  $('#fabDone').onclick = () => pickTool('select');
+  $('#fabAdd').onclick = () => openLib(!$('#libSheet').classList.contains('open'));
+  $('#libClose').onclick = () => openLib(false);
+  $('#fabMeasure').onclick = () => {
+    const shown = !$('#measureDock').classList.contains('hidden');
+    dockPinned = !shown;
+    if (shown) { ed.select(null); if (['wall', 'walk'].includes(ed.tool)) pickTool('select'); }
+    updateDockVis();
+  };
+  // 點畫布就收起構件庫與「顯示」小選單
+  $('#cv').addEventListener('pointerdown', () => { openLib(false); $('.hud-right').classList.remove('open'); });
+
+  $$('#viewSw .vs').forEach((b) => {
+    b.onclick = () => {
+      if (b.dataset.view === '3d') open3d();
+      else if (b.dataset.view === 'walk') openWalk();
+      else closeModal();
+    };
+  });
+
+  // 數字鍵盤：直接往輸入框裡打字，「確定」就是原本的套用
+  const inp = $('#mdInput');
+  if (window.matchMedia('(pointer:coarse)').matches) inp.setAttribute('inputmode', 'none');   // 觸控裝置不叫出系統鍵盤
+  $$('#mdKeys button[data-k]').forEach((b) => {
+    b.onclick = () => {
+      const k = b.dataset.k;
+      if (k === 'bs') inp.value = inp.value.slice(0, -1);
+      else if (k === '.') { if (!inp.value.includes('.')) inp.value += inp.value ? '.' : '0.'; }
+      else inp.value += k;
+    };
+  });
+  $$('#mdTabs button').forEach((b) => { b.onclick = () => { dockMode = b.dataset.m; inp.value = ''; updateDockVis(); }; });
+
+  ed.addEventListener('select', () => { if (!ed.sel) insOpen = false; renderSidePanel(); updateDockVis(); });
+  ed.addEventListener('tool', () => { renderSidePanel(); updateDockVis(); if ($('#libSheet').classList.contains('open')) renderLib(); });
+  ed.addEventListener('painted', updateDimPill);
+  ed.addEventListener('stats', updateDockVis);
+  window.addEventListener('resize', syncLift);
+  new ResizeObserver(syncLift).observe($('#measureDock'));
+  // 保險：不管什麼原因被捲動了，立刻拉回原位
+  $('.stage').addEventListener('scroll', (e) => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0; });
+  renderSidePanel(); updateDockVis();
 }
 
 /* ── 工具列 ─────────────────────────── */
@@ -302,7 +518,14 @@ function wireDock() {
     // 輸入框空白時套用目前的讀數 —— 串流機種要重複套用同一個數值時就靠這個
     const mm = inp.value.trim() ? parseLen(inp.value) : (meter.live ?? meter.lastMm);
     if (!(mm > 0)) return toast('請先量測或輸入長度', 'bad');
+    if (dockMode === 'thick' && ed.sel?.kind === 'wall') {
+      const w = ed.entity(ed.sel);
+      if (w) { upd(() => { w.thickness = mm; }, '牆厚'); toast(`牆厚設為 ${fmtLen(mm)} ${getUnit()}`, 'ok'); }
+      inp.value = ''; inp.blur(); updateDockVis();
+      return;
+    }
     ed.applyMeasure(mm);
+    updateDockVis();
     inp.value = '';
     inp.blur();
   };
@@ -381,15 +604,15 @@ function numInput(val, onChange, step = 1) {
 }
 
 /** 面板是否為滑出／抽屜形式（平板與手機） */
-const isDrawer = () => window.innerWidth <= 1100;
+const isDrawer = () => true;      // 屬性面板在所有尺寸都是滑出式
 
 function renderInspector() {
   const panel = $('#inspector');
   const box = $('#insBody');
   const sel = ed.sel;
   // 抽屜版面下，只有真的有東西要看時才自動彈出，免得擋住畫布
-  if (isDrawer()) panel.classList.toggle('open', !!sel || ed.tool === 'item');
-  else panel.classList.remove('open');
+  // 不再一選取就彈出：按右側的「屬性」／「樓層」才展開，畫布才不會老是被蓋住
+  panel.classList.toggle('open', insOpen);
 
   if (!sel) {
     box.replaceChildren(ed.tool === 'item' ? catalogPanel()

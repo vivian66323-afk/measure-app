@@ -54,6 +54,13 @@ if (location.protocol === 'file:') {
   <button class="tb" id="btnProjects">專案</button>
   <input class="projname" id="projName" title="專案名稱" placeholder="未命名專案">
 
+  <div class="spacer"></div>
+
+  <div class="viewsw" id="viewSw" title="切換檢視">
+    <button class="vs on" data-view="2d">平面</button>
+    <button class="vs" data-view="3d">3D</button>
+    <button class="vs" data-view="walk">走動</button>
+  </div>
   <div class="floorbar">
     <select id="floorSel" title="樓層"></select>
     <button class="tb icon" id="btnFloorAdd" title="新增樓層">＋</button>
@@ -116,15 +123,55 @@ if (location.protocol === 'file:') {
       <button class="zbtn" id="btnTrack" title="自動正交追蹤 (F9)">⌖</button>
     </div>
 
+    <!-- 上方中央：目前這一段／選取物件的尺寸 -->
+    <div class="dim-pill" id="dimPill" hidden></div>
+
+    <!-- 右側：依情境變換的功能鈕（沒選東西／選了東西／正在畫） -->
+    <div class="side-panel" id="sidePanel"></div>
+
+    <!-- 右下：復原／重做、畫牆、新增構件 -->
+    <div class="fabs fabs-right" id="fabsRight">
+      <button class="fab sm" id="fabUndo" title="復原 (Ctrl+Z)"><svg class="ic"><use href="#i-undo"></use></svg></button>
+      <button class="fab sm" id="fabRedo" title="重做 (Ctrl+Y)"><svg class="ic"><use href="#i-redo"></use></svg></button>
+      <div class="fab-row">
+        <button class="fab-done" id="fabDone" hidden>完成</button>
+        <button class="fab wall" id="fabWall" title="畫牆 (W)"><svg class="ic"><use href="#i-wall"></use></svg><b>畫牆</b></button>
+        <button class="fab add" id="fabAdd" title="新增門窗、樑柱、設備、家具">＋</button>
+      </div>
+    </div>
+
+    <!-- 左下：量測輸入（數字鍵盤） -->
+    <div class="fabs fabs-left">
+      <button class="fab measure" id="fabMeasure" title="量測輸入"><svg class="ic"><use href="#i-dim"></use></svg></button>
+    </div>
+
+    <!-- 「＋」構件庫：從底部滑出 -->
+    <div class="lib-sheet" id="libSheet">
+      <div class="lib-head">
+        <div class="lib-tabs" id="libTabs"></div>
+        <button class="lib-close" id="libClose" title="收起">⌄</button>
+      </div>
+      <div class="lib-grid" id="libGrid"></div>
+    </div>
+
     <div class="measure-dock" id="measureDock">
       <div class="md-head">
         <span class="md-title">量測</span>
         <span class="md-live" id="mdLive">—</span>
       </div>
+      <div class="md-tabs" id="mdTabs">
+        <button class="on" data-m="len">長度</button>
+        <button data-m="thick">牆厚</button>
+      </div>
       <div class="md-body">
         <input id="mdInput" inputmode="decimal" placeholder="輸入長度 (公分)">
-        <button class="md-btn" id="mdApply">套用</button>
         <button class="md-btn ghost" id="mdBack" title="退回上一個點 (Backspace)">↶</button>
+      </div>
+      <div class="md-keys" id="mdKeys">
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="bs" class="fn">⌫</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="md-btn ok" id="mdApply">確定</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="0" class="wide">0</button><button data-k=".">.</button>
       </div>
       <div class="md-foot">
         <button class="md-side" id="mdSide" title="切換牆體長在線的哪一側">
