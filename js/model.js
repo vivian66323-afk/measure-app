@@ -84,6 +84,8 @@ export const newItem = (type, x, y, def) => ({
   w: def?.w ?? 600, h: def?.h ?? 600, h3d: def?.h3d ?? 700,
   // 樓梯專屬：階數與梯段淨寬。非樓梯構件為 undefined，不會出現在面板上。
   ...(def?.steps != null ? { steps: def.steps, runW: def.runW } : {}),
+  // 電器／水路這類貼牆或吊在天花的構件才有離地高度，家具一律落地
+  ...(def?.z != null ? { z: def.z } : {}),
   label: '', showLabel: true,
 });
 export const newDim = (a, b, off = 400) => ({ id: uid('d'), a: { ...a }, b: { ...b }, off });

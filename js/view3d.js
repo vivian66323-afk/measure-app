@@ -26,7 +26,7 @@ export function render3d(cv, floor, rooms, view = {}) {
   cv.width = r.width * dpr; cv.height = r.height * dpr;
   const ctx = cv.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#0f141b';
+  ctx.fillStyle = '#141414';
   ctx.fillRect(0, 0, r.width, r.height);
 
   const rot = view.rotY || 0;
@@ -35,7 +35,7 @@ export function render3d(cv, floor, rooms, view = {}) {
   for (const w of floor.walls) all.push(w.a, w.b);
   const bb = G.bbox(all);
   if (!bb) {
-    ctx.fillStyle = '#68748a'; ctx.font = '14px system-ui'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#7d766b'; ctx.font = '14px system-ui'; ctx.textAlign = 'center';
     ctx.fillText('尚未繪製牆體', r.width / 2, r.height / 2);
     return;
   }
@@ -62,10 +62,10 @@ export function render3d(cv, floor, rooms, view = {}) {
       i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y);
     });
     ctx.closePath();
-    ctx.fillStyle = '#1d2733'; ctx.fill();
-    ctx.strokeStyle = '#2b3846'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#22201d'; ctx.fill();
+    ctx.strokeStyle = '#3a3632'; ctx.lineWidth = 1; ctx.stroke();
     const c = P(room.centroid.x, room.centroid.y, 0);
-    ctx.fillStyle = '#7f8ea3'; ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#8f8676'; ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
     ctx.fillText(room.name, c.x, c.y);
   }
   ctx.restore();

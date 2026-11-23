@@ -5,20 +5,22 @@ import { detectRooms } from './rooms.js';
 import { SYMBOLS, partsOf, cornersOf } from './catalog.js';
 import * as WL from './wall.js';
 import { moveSetOf, findSnap, mergeOverlaps } from './assemble.js';
+import { outerDims, dimSegments } from './autodim.js';
 import { fmtLen, getUnit, toM2, toPing, fmt, uid, raf, toast } from './util.js';
 
 const C = {
-  paper: '#ffffff',
-  grid: '#eef2f7', gridMajor: '#dde5ef',
-  wall: '#2b3442', wallExt: '#1b222c',
-  roomFill: 'rgba(46,124,246,0.07)', roomFill2: 'rgba(46,124,246,0.12)',
-  roomText: '#33415a', roomSub: '#7d8b9f',
+  paper: '#faf9f7',
+  grid: '#f0ede8', gridMajor: '#e2ddd4',
+  wall: '#2a2a2a', wallExt: '#1a1a1a',
+  roomFill: 'rgba(201,169,110,0.10)', roomFill2: 'rgba(201,169,110,0.22)',
+  roomText: '#3a342b', roomSub: '#8a8172',
   dim: '#c0392b', dimText: '#a5301f',
-  sel: '#2e7cf6', selSoft: 'rgba(46,124,246,.25)',
-  snap: '#ff9f0a', ghost: '#2e7cf6',
-  column: '#4a5568', text: '#22303f',
-  door: '#3b4757', window: '#2f6fb5',
-  itemFill: '#f2f5f9', itemLine: '#5a6b80', itemText: '#7d8b9f',
+  dimAuto: '#3a342b', dimAutoSoft: '#a39a8b', dimAutoText: '#6b6358',
+  sel: '#a8843f', selSoft: 'rgba(168,132,63,.28)',
+  snap: '#ff9f0a', ghost: '#a8843f',
+  column: '#4f4a43', text: '#2a2620',
+  door: '#3f3a33', window: '#5f7f96',
+  itemFill: '#f4f1ec', itemLine: '#6b6358', itemText: '#8a8172',
   photo: '#e8853a', photoCone: 'rgba(232,133,58,.16)',
   beam: '#8a5a2b', beamFill: 'rgba(138,90,43,.10)',
 };
@@ -57,6 +59,10 @@ export class Editor extends EventTarget {
     this.hover = null;
     this.rooms = [];
     this.showGrid = true;
+    this.autoDims = true;        // 自動外圍尺寸鏈
+    this.underlayImg = null;     // 臨摹底圖（由 app.js 載入後塞進來）
+    this.underlayFor = null;     // 目前這張圖對應的 photoId
+    this.pick = null;            // 兩點拾取 { kind, pts:[], hint }，底圖校正比例／移動用
     this.ortho = true;
     this.gridStep = 100;         // mm
     this.mouse = { x: 0, y: 0 }; // 模型座標
@@ -102,7 +108,7 @@ export class Editor extends EventTarget {
     this.render();
   }
 
-  fit(pad = 70) {
+  fit(pad = this.autoDims ? 104 : 70) {      // 開著外圍尺寸鏈時四邊多留一點，尺寸才不會被切掉
     const b = this.doc.extent();
     if (!b || b.w + b.h === 0) { this.scale = 0.035; this.ox = this.W / 2; this.oy = this.H / 2; this.render(); return; }
     const s = Math.min((this.W - pad * 2) / Math.max(b.w, 1000), (this.H - pad * 2) / Math.max(b.h, 1000));
@@ -711,8 +717,25 @@ export class Editor extends EventTarget {
     return this.toModel(e.clientX - r.left, e.clientY - r.top);
   }
 
+  /** 開始一次「在圖面上點兩個點」的拾取，點完會發出 pick 事件 */
+  startPick(kind) {
+    this.draft = null; this.guides = [];
+    this.pick = { kind, pts: [] };
+    this.render();
+  }
+
   _down(e) {
     const raw = this._pt(e);
+    if (this.pick) {
+      // 拾取中不吸附：底圖上的線跟現有牆體沒有關係，吸過去反而點不準
+      this.pick.pts.push(raw);
+      if (this.pick.pts.length >= 2) {
+        const pk = this.pick; this.pick = null;
+        this.dispatchEvent(new CustomEvent('pick', { detail: pk }));
+      }
+      this.render();
+      return;
+    }
     const p = this.snap(raw);
     const t = this.tool;
 
@@ -1015,6 +1038,7 @@ export class Editor extends EventTarget {
   }
 
   cancel() {
+    if (this.pick) { this.pick = null; this.dispatchEvent(new CustomEvent('pick', { detail: null })); this.render(); return; }
     if (this.draft) { this.draft = null; this.chain = []; this.beamChain = []; this.guides = []; this.render(); return; }
     if (this.walk) { this.walk = null; this.dispatchEvent(new CustomEvent('walk')); this.render(); return; }
     if (this.sel) this.select(null);
@@ -1193,6 +1217,7 @@ export class Editor extends EventTarget {
     ctx.fillStyle = C.paper;
     ctx.fillRect(0, 0, W, H);
 
+    this._underlay(ctx);
     if (this.showGrid) this._grid(ctx);
     if (this.fs?.ok) this._fengshui(ctx);
     this._rooms(ctx);
@@ -1202,12 +1227,14 @@ export class Editor extends EventTarget {
     this._items(ctx);
     this._columns(ctx);
     this._wallDims(ctx);
+    if (this.autoDims) this._autoDims(ctx);
     this._dims(ctx);
     this._texts(ctx);
     this._roomLabels(ctx);
     this._beams(ctx);
     this._photos(ctx);
     this._overlay(ctx);
+    this._pickMarks(ctx);
     // 畫面重畫完才通知，跟著畫面走的浮動控制項才不會跟圖形對不齊
     this.dispatchEvent(new CustomEvent('painted'));
   }
@@ -1257,6 +1284,39 @@ export class Editor extends EventTarget {
     }
     this.recompute();
     return next;
+  }
+
+  /** 臨摹底圖：畫在最底層、半透明，牆體照著描 */
+  _underlay(ctx) {
+    const u = this.doc.floor.underlay;
+    const img = this.underlayImg;
+    if (!u || u.visible === false || !img || this.underlayFor !== u.photoId) return;
+    const h = u.w * (u.ratio || 1);
+    const s = this.toScreen({ x: u.cx - u.w / 2, y: u.cy + h / 2 });
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.05, Math.min(1, u.opacity ?? 0.5));
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, s.x, s.y, this.px(u.w), this.px(h));
+    ctx.restore();
+  }
+
+  /** 兩點拾取的標記：已點的點、連到游標的線 */
+  _pickMarks(ctx) {
+    if (!this.pick) return;
+    const pts = this.pick.pts.map((p) => this.toScreen(p));
+    const m = this.toScreen(this.mouse);
+    ctx.save();
+    ctx.strokeStyle = C.snap; ctx.fillStyle = C.snap; ctx.lineWidth = 2;
+    if (pts.length === 1) {
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(m.x, m.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    for (const p of pts) {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p.x - 11, p.y); ctx.lineTo(p.x + 11, p.y); ctx.moveTo(p.x, p.y - 11); ctx.lineTo(p.x, p.y + 11); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _grid(ctx) {
@@ -1428,7 +1488,16 @@ export class Editor extends EventTarget {
       ctx.restore();
 
       const def = SYMBOLS[it.type];
-      if (it.showLabel !== false && this.px(Math.min(it.w, it.h)) > 42) {
+      if (def?.tag) {
+        // 電器／水路符號中央的縮寫字（插、S、TV、冷、熱…）
+        if (this.px(it.w) > 9) {
+          const fs = Math.max(7, Math.min(13, (this.px(it.w) * 0.8) / Math.max(1, def.tag.length * 0.8)));
+          ctx.font = `700 ${fs}px system-ui,sans-serif`;
+          ctx.fillStyle = sel ? C.sel : C.itemLine;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(def.tag, s.x, s.y);
+        }
+      } else if (it.showLabel !== false && this.px(Math.min(it.w, it.h)) > 42) {
         this._label(ctx, { x: s.x, y: s.y }, it.label || def?.name || '', sel ? C.sel : C.itemText, 10, false);
       }
       if (sel) {
@@ -1469,6 +1538,50 @@ export class Editor extends EventTarget {
       const sel = this.sel?.kind === 'wall' && this.sel.id === w.id;
       this._label(ctx, this.toScreen(mid), fmtLen(L), sel ? C.sel : C.dimText, sel ? 12 : 11, true);
     }
+  }
+
+  /**
+   * 自動外圍尺寸鏈：四邊各兩層（每一段／總長）。
+   * 離外框的距離用螢幕像素算，縮放到多小字都不會擠進圖裡。
+   */
+  _autoDims(ctx) {
+    const od = outerDims(this.doc.floor, this.mitre);
+    if (!od) return;
+    const segs = dimSegments(od, this.mm(30), this.mm(56));
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const g of segs) {
+      const a = this.toScreen(g.a), b = this.toScreen(g.b);
+      const ea = this.toScreen(g.ea), eb = this.toScreen(g.eb);
+      const horiz = g.side === 'top' || g.side === 'bottom';
+      const total = g.tier === 2;
+      ctx.strokeStyle = total ? C.dimAuto : C.dimAutoSoft;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      // 延伸線：從外框拉到尺寸線，稍微超出一點
+      const ox = horiz ? 0 : Math.sign(a.x - ea.x) * 4, oy = horiz ? Math.sign(a.y - ea.y) * 4 : 0;
+      const gx = horiz ? 0 : Math.sign(a.x - ea.x) * 6, gy = horiz ? Math.sign(a.y - ea.y) * 6 : 0;
+      ctx.moveTo(ea.x + gx, ea.y + gy); ctx.lineTo(a.x + ox, a.y + oy);
+      ctx.moveTo(eb.x + gx, eb.y + gy); ctx.lineTo(b.x + ox, b.y + oy);
+      // 建築慣用的 45° 斜撇
+      for (const p of [a, b]) { ctx.moveTo(p.x - 3.5, p.y + 3.5); ctx.lineTo(p.x + 3.5, p.y - 3.5); }
+      ctx.stroke();
+
+      const px = Math.hypot(b.x - a.x, b.y - a.y);
+      const text = fmtLen(g.len);
+      const size = total ? 11 : 10;
+      ctx.font = `${total ? 700 : 500} ${size}px ui-monospace,"Segoe UI",system-ui,sans-serif`;
+      if (ctx.measureText(text).width + 4 > px) continue;      // 放不下就不寫（多半是牆厚）
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      ctx.fillStyle = total ? C.dimAuto : C.dimAutoText;
+      if (horiz) ctx.fillText(text, mx, my - 7);
+      else {
+        ctx.save(); ctx.translate(mx - 7, my); ctx.rotate(-Math.PI / 2);
+        ctx.fillText(text, 0, 0); ctx.restore();
+      }
+    }
+    ctx.restore();
   }
 
   _label(ctx, s, text, color, size = 11, box = true) {
@@ -1533,10 +1646,12 @@ export class Editor extends EventTarget {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '600 13px system-ui,sans-serif';
       ctx.fillStyle = C.roomText;
-      ctx.fillText(r.name, s.x, s.y - 9);
+      ctx.fillText(r.name, s.x, s.y - 15);
       ctx.font = '11px ui-monospace,system-ui,sans-serif';
       ctx.fillStyle = C.roomSub;
-      ctx.fillText(`${fmt(m2, 2)} m² · ${fmt(toPing(m2), 2)} 坪`, s.x, s.y + 8);
+      ctx.fillText(`${fmt(m2, 2)} m² · ${fmt(toPing(m2), 2)} 坪`, s.x, s.y + 2);
+      // 淨高：量房圖上每間房都要看得到，不用點進樓層面板才知道
+      ctx.fillText(`H=${fmtLen(this.doc.floor.height || M.DEFAULTS.wallHeight)} ${getUnit()}`, s.x, s.y + 17);
     }
   }
 
@@ -1674,7 +1789,7 @@ export class Editor extends EventTarget {
     ctx.beginPath();
     ctx.moveTo(tip.x, tip.y); ctx.lineTo(pl.x, pl.y); ctx.lineTo(bk.x, bk.y); ctx.lineTo(-pl.x, -pl.y);
     ctx.closePath();
-    ctx.fillStyle = '#2e7cf6'; ctx.fill();
+    ctx.fillStyle = '#c9a96e'; ctx.fill();
     ctx.font = '700 10px system-ui,sans-serif';
     ctx.fillStyle = '#33415a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('北', Math.cos(a) * (r + 13), Math.sin(a) * (r + 13));

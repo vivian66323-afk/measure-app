@@ -17,7 +17,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(ROOT, 'dist');
 
 const FILES = ['index.html', 'share.html', 'manifest.webmanifest', 'sw.js'];
-const DIRS = ['css', 'js'];
+const DIRS = ['css', 'js', 'img'];
 
 /* Cloudflare Pages / Netlify 都吃這兩個檔 */
 const HEADERS = `/*

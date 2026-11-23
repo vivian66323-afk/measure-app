@@ -31,7 +31,7 @@ async function boot() {
 
 function fail(msg) {
   root.replaceChildren(el('div', { class: 'sh-loading' },
-    el('div', { style: 'font-size:17px;color:#e8edf4;margin-bottom:8px' }, '無法開啟'),
+    el('div', { style: 'font-size:17px;color:#f3efe8;margin-bottom:8px' }, '無法開啟'),
     msg));
 }
 
@@ -100,7 +100,7 @@ function render(p) {
     el('button', { class: 'tb', onclick: () => window.print() }, '列印 / 存成 PDF'),
     el('button', { class: 'tb', onclick: () => download(`${p.name}_面積表.csv`, scheduleCSV(p, floors), 'text/csv;charset=utf-8') }, '下載面積表 CSV'),
   ));
-  parts.push(el('div', { style: 'margin-top:26px;color:#4d5769;font-size:11px;text-align:center' },
+  parts.push(el('div', { style: 'margin-top:26px;color:#5a544b;font-size:11px;text-align:center' },
     `由 丈量APP 產生　·　單位 ${getUnit()}　·　面積為扣除牆體後的室內淨面積`));
 
   root.replaceChildren(...parts.filter(Boolean));

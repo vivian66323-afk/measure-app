@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#12161d">
-<title>丈量APP — 藍牙測距量房平台</title>
+<meta name="theme-color" content="#141414">
+<title>菩語丈量 — 藍牙測距量房平台</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="css/app.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%232e7cf6'/><path d='M14 40h36M14 40v-8M50 40v-8M23 40v-5M32 40v-8M41 40v-5' stroke='white' stroke-width='4' fill='none' stroke-linecap='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231a1a1a'/><path d='M14 40h36M14 40v-8M50 40v-8M23 40v-5M32 40v-8M41 40v-5' stroke='%23c9a96e' stroke-width='4' fill='none' stroke-linecap='round'/></svg>">
 </head>
 <body>
 
@@ -16,14 +16,14 @@
 <script>
 if (location.protocol === 'file:') {
   document.documentElement.innerHTML =
-    '<head><meta charset="utf-8"><title>請用伺服器開啟</title></head><body style="margin:0;height:100vh;display:grid;place-items:center;background:#12161d;color:#e8edf4;font:14px/1.8 \'Noto Sans TC\',\'Microsoft JhengHei\',system-ui,sans-serif">'
-    + '<div style="max-width:560px;padding:28px 32px;border:1px solid #2f3947;border-radius:14px;background:#1a2029">'
+    '<head><meta charset="utf-8"><title>請用伺服器開啟</title></head><body style="margin:0;height:100vh;display:grid;place-items:center;background:#141414;color:#f3efe8;font:14px/1.8 \'Noto Sans TC\',\'Microsoft JhengHei\',system-ui,sans-serif">'
+    + '<div style="max-width:560px;padding:28px 32px;border:1px solid #3a3632;border-radius:14px;background:#1a1a1a">'
     + '<h2 style="margin:0 0 14px;font-size:19px">請不要直接雙擊 index.html</h2>'
-    + '<p style="margin:0 0 16px;color:#98a4b5">瀏覽器在 <code style="color:#ffd591">file://</code> 下會封鎖 ES 模組、Web Bluetooth 與離線快取，程式無法運作。</p>'
-    + '<p style="margin:0 0 8px;color:#e8edf4"><b>正確開啟方式：</b></p>'
-    + '<p style="margin:0 0 6px;color:#98a4b5">① 雙擊資料夾裡的 <code style="color:#8ff0c4">啟動丈量APP.bat</code></p>'
-    + '<p style="margin:0 0 18px;color:#98a4b5">② 瀏覽器會自動打開 <code style="color:#8ff0c4">http://localhost:5173</code></p>'
-    + '<a href="http://localhost:5173" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#2e7cf6;color:#fff;text-decoration:none;font-weight:600">伺服器已在跑？點此開啟</a>'
+    + '<p style="margin:0 0 16px;color:#b3aa9c">瀏覽器在 <code style="color:#ffd591">file://</code> 下會封鎖 ES 模組、Web Bluetooth 與離線快取，程式無法運作。</p>'
+    + '<p style="margin:0 0 8px;color:#f3efe8"><b>正確開啟方式：</b></p>'
+    + '<p style="margin:0 0 6px;color:#b3aa9c">① 雙擊資料夾裡的 <code style="color:#8ff0c4">啟動丈量APP.bat</code></p>'
+    + '<p style="margin:0 0 18px;color:#b3aa9c">② 瀏覽器會自動打開 <code style="color:#8ff0c4">http://localhost:5173</code></p>'
+    + '<a href="http://localhost:5173" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#c9a96e;color:#fff;text-decoration:none;font-weight:600">伺服器已在跑？點此開啟</a>'
     + '</div></body>';
 }
 </script>
@@ -49,7 +49,7 @@ if (location.protocol === 'file:') {
 </svg>
 
 <header class="topbar">
-  <div class="brand"><span class="dot"></span>丈量APP</div>
+  <div class="brand"><img src="img/logo-puyu.png" alt="菩語國際設計"><span>丈量</span></div>
 
   <button class="tb" id="btnProjects">專案</button>
   <input class="projname" id="projName" title="專案名稱" placeholder="未命名專案">
@@ -111,6 +111,7 @@ if (location.protocol === 'file:') {
       <button class="zbtn" id="btnZoomOut">－</button>
       <button class="zbtn" id="btnFit" title="全圖">⤢</button>
       <button class="zbtn" id="btnGrid" title="格線">#</button>
+      <button class="zbtn" id="btnDims" title="外圍尺寸鏈（每段＋總長）">⟷</button>
       <button class="zbtn" id="btnOrtho" title="正交鎖定 (F8)">⊥</button>
       <button class="zbtn" id="btnTrack" title="自動正交追蹤 (F9)">⌖</button>
     </div>

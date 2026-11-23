@@ -17,7 +17,7 @@ const F = 'f', S = 's', FS = 'fs';
 /** 常用組合：外框 + 內部分隔 */
 const box = (w, h, m = FS) => ['r', 0, 0, w, h, m];
 
-export const CATS = ['客廳', '臥室', '廚房', '衛浴', '收納', '樓梯', '建築'];
+export const CATS = ['客廳', '臥室', '廚房', '衛浴', '收納', '樓梯', '電器', '水路', '建築'];
 
 export const SYMBOLS = {
   /* ── 客廳 ───────────────────────── */
@@ -312,6 +312,110 @@ export const SYMBOLS = {
         -w / 2 + rw / 2 + 130, h / 2 - land - 400], false, S]);
       return p;
     },
+  },
+
+  /* ── 電器設備 ─────────────────────
+     平面上的尺寸是「符號大小」不是實物大小 —— 一個 86mm 的面板照實畫，在 1:50 的圖上只剩一個點。
+     tag  ＝畫在符號中央的縮寫字，一眼分得出是插座還是開關
+     z    ＝離地高度（mm），放進圖面後可在面板改
+     d3d  ＝3D 時實際凸出牆面的厚度（貼牆的面板類才有） */
+  outlet: {
+    name: '插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 300, d3d: 12, tag: '插',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  outletHigh: {
+    name: '高位插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 1100, d3d: 12, tag: '高',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  outlet220: {
+    name: '220V 專用插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 2100, d3d: 12, tag: '220',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['c', 0, 0, w / 2 - 34, S], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  outletFloor: {
+    name: '地板插座', cat: '電器', w: 240, h: 240, h3d: 8, z: 0, tag: '地',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['c', 0, 0, w / 2 - 30, S]],
+  },
+  switch1: {
+    name: '開關', cat: '電器', w: 220, h: 220, h3d: 120, z: 1200, d3d: 12, tag: 'S',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  netOutlet: {
+    name: '網路插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 300, d3d: 12, tag: '網',
+    parts: (w, h) => [['p', [-w / 2, h / 2, w / 2, h / 2, 0, -h / 2], true, FS]],
+  },
+  tvOutlet: {
+    name: '電視插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 300, d3d: 12, tag: 'TV',
+    parts: (w, h) => [['p', [-w / 2, h / 2, w / 2, h / 2, 0, -h / 2], true, FS]],
+  },
+  telOutlet: {
+    name: '電話插座', cat: '電器', w: 220, h: 220, h3d: 90, z: 300, d3d: 12, tag: 'T',
+    parts: (w, h) => [['p', [-w / 2, h / 2, w / 2, h / 2, 0, -h / 2], true, FS]],
+  },
+  panelBox: {
+    name: '配電箱', cat: '電器', w: 500, h: 180, h3d: 600, z: 1400, d3d: 100, tag: '電',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['l', -w / 2, -h / 2, w / 2, h / 2]],
+  },
+  weakBox: {
+    name: '弱電箱', cat: '電器', w: 400, h: 180, h3d: 300, z: 300, d3d: 100, tag: '弱',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['l', -w / 2, h / 2, w / 2, -h / 2]],
+  },
+  intercom: {
+    name: '對講機', cat: '電器', w: 240, h: 200, h3d: 220, z: 1300, d3d: 30, tag: '對',
+    parts: (w, h) => [['r', 0, 0, w, h, FS]],
+  },
+  smoke: {
+    name: '偵煙器', cat: '電器', w: 260, h: 260, h3d: 50, z: 2700, tag: '煙',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['c', 0, 0, w / 4, S]],
+  },
+  camera: {
+    name: '攝影機', cat: '電器', w: 260, h: 260, h3d: 120, z: 2400, tag: '攝',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS]],
+  },
+  lightPoint: {
+    name: '燈具出線口', cat: '電器', w: 260, h: 260, h3d: 40, z: 2740,
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['l', -w / 2, 0, w / 2, 0], ['l', 0, -h / 2, 0, h / 2]],
+  },
+  gasMeter: {
+    name: '瓦斯表', cat: '電器', w: 320, h: 200, h3d: 300, z: 1200, d3d: 150, tag: '瓦',
+    parts: (w, h) => [['r', 0, 0, w, h, FS]],
+  },
+
+  /* ── 水路 ───────────────────────── */
+  waterCold: {
+    name: '冷水出水口', cat: '水路', w: 200, h: 200, h3d: 60, z: 600, d3d: 30, tag: '冷',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  waterHot: {
+    name: '熱水出水口', cat: '水路', w: 200, h: 200, h3d: 60, z: 600, d3d: 30, tag: '熱',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['c', 0, 0, w / 2 - 34, S], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  drainFloor: {
+    name: '地板排水', cat: '水路', w: 220, h: 220, h3d: 6, z: 0, tag: '排',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['c', 0, 0, w / 2 - 24, S]],
+  },
+  drainWall: {
+    name: '壁排水口', cat: '水路', w: 200, h: 200, h3d: 60, z: 450, d3d: 30, tag: '排',
+    parts: (w, h) => [['r', 0, 0, w, h, FS], ['l', -w / 2, h / 2, w / 2, h / 2]],
+  },
+  soilPipe: {
+    name: '糞管', cat: '水路', w: 260, h: 260, h3d: 6, z: 0, tag: '糞',
+    parts: (w, h) => [['c', 0, 0, w / 2, FS], ['c', 0, 0, w / 2 - 40, S]],
+  },
+  waterMeter: {
+    name: '水表', cat: '水路', w: 300, h: 200, h3d: 200, z: 300, d3d: 150, tag: '水',
+    parts: (w, h) => [['r', 0, 0, w, h, FS]],
+  },
+  valve: {
+    name: '止水閥', cat: '水路', w: 220, h: 220, h3d: 60, z: 300, d3d: 60,
+    parts: (w, h) => [['p', [-w / 2, h / 2, -w / 2, -h / 2, w / 2, h / 2, w / 2, -h / 2], true, FS]],
+  },
+  waterHeater: {
+    name: '熱水器', cat: '水路', w: 450, h: 250, h3d: 650, z: 1300, d3d: 250, tag: '熱水器',
+    parts: (w, h) => [['r', 0, 0, w, h, FS]],
+  },
+  washerTap: {
+    name: '洗衣機給排水', cat: '水路', w: 300, h: 200, h3d: 150, z: 1100, d3d: 40, tag: '洗',
+    parts: (w, h) => [['r', 0, 0, w, h, FS]],
   },
 
   /* ── 建築 ───────────────────────── */

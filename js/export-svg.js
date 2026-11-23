@@ -3,6 +3,7 @@ import * as G from './geometry.js';
 import * as WL from './wall.js';
 import { flatten, SYMBOLS } from './catalog.js';
 import { fmtLen, getUnit, toM2, toPing, fmt } from './util.js';
+import { outerDims, dimSegments } from './autodim.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -15,7 +16,7 @@ export function buildSVG(floor, rooms, opt = {}) {
     pts.push({ x: it.x - r, y: it.y - r }, { x: it.x + r, y: it.y + r });
   }
   const b = G.bbox(pts) || { x0: 0, y0: 0, x1: 1000, y1: 1000, w: 1000, h: 1000 };
-  const pad = 900;
+  const pad = 1500;      // 四邊要留給兩層外圍尺寸
   const W = b.w + pad * 2, H = b.h + pad * 2 + 700;
   // SVG 以 Y 向下，模型 Y 向上 → 轉換
   const X = (x) => (x - b.x0 + pad).toFixed(1);
@@ -26,13 +27,15 @@ export function buildSVG(floor, rooms, opt = {}) {
   o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" width="${(W / 10).toFixed(0)}mm" height="${(H / 10).toFixed(0)}mm">`);
   o.push(`<style>
     text{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;text-anchor:middle;dominant-baseline:middle}
-    .wall{fill:#2b3442}.wallx{fill:#161c24}.room{fill:#2e7cf611}
+    .wall{fill:#2b3442}.wallx{fill:#161616}.room{fill:#c9a96e11}
     .dim{fill:#c0392b;font-size:130px}.rn{fill:#26313f;font-size:230px;font-weight:600}
     .ra{fill:#6b7a8d;font-size:150px}.sym{stroke:#2f6fb5;fill:none;stroke-width:20}
     .door{stroke:#3b4757;fill:none;stroke-width:20}.col{fill:#4a5568}
     .note{fill:#22303f;font-size:180px}.frame{fill:none;stroke:#c9d3df;stroke-width:12}
     .fnP{fill:#f2f5f9;stroke:#5a6b80;stroke-width:16}.fnL{stroke:#5a6b80;stroke-width:16;fill:none}
-    .fnT{fill:#7d8b9f;font-size:130px}
+    .fnT{fill:#8f8676;font-size:130px}
+    .od{stroke:#93a0b2;stroke-width:10;fill:none}.odT{stroke:#3d4a5c;stroke-width:12;fill:none}
+    .odx{fill:#55627a;font-size:125px;stroke:none}.odTx{fill:#3d4a5c;font-size:140px;font-weight:700;stroke:none}
   </style>`);
   o.push(`<rect width="100%" height="100%" fill="#fff"/>`);
 
@@ -107,7 +110,7 @@ export function buildSVG(floor, rooms, opt = {}) {
     for (const [a, b] of segs) o.push(`<line class="fnL" x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}"/>`);
     for (const ar of arcs) o.push(`<circle class="fnL" cx="${X(ar.c.x)}" cy="${Y(ar.c.y)}" r="${ar.r}"/>`);
     if (it.showLabel !== false) {
-      const name = it.label || SYMBOLS[it.type]?.name || '';
+      const name = SYMBOLS[it.type]?.tag ?? (it.label || SYMBOLS[it.type]?.name || '');
       const a = -G.deg(it.rot || 0);
       if (name) o.push(`<text class="fnT" x="${X(it.x)}" y="${Y(it.y)}" transform="rotate(${a.toFixed(1)} ${X(it.x)} ${Y(it.y)})">${esc(name)}</text>`);
     }
@@ -125,11 +128,28 @@ export function buildSVG(floor, rooms, opt = {}) {
     o.push(`<text class="dim" x="${X(mid.x)}" y="${Y(mid.y)}" transform="rotate(${(-a).toFixed(1)} ${X(mid.x)} ${Y(mid.y)})">${esc(fmtLen(L, unit))}</text>`);
   }
 
+  // 外圍尺寸鏈：內層每一段、外層總長
+  for (const g of dimSegments(outerDims(floor, WL.mitreMap(floor.walls)), 480, 900)) {
+    const horiz = g.side === 'top' || g.side === 'bottom';
+    const cls = g.tier === 2 ? 'odT' : 'od';
+    o.push(`<line class="${cls}" x1="${X(g.a.x)}" y1="${Y(g.a.y)}" x2="${X(g.b.x)}" y2="${Y(g.b.y)}"/>`);
+    for (const [e, p] of [[g.ea, g.a], [g.eb, g.b]]) {
+      o.push(`<line class="od" x1="${X(e.x)}" y1="${Y(e.y)}" x2="${X(p.x)}" y2="${Y(p.y)}"/>`);
+      o.push(`<line class="${cls}" x1="${X(p.x - 45)}" y1="${Y(p.y - 45)}" x2="${X(p.x + 45)}" y2="${Y(p.y + 45)}"/>`);
+    }
+    const text = fmtLen(g.len, unit);
+    if (g.len < text.length * 85) continue;
+    const mx = (g.a.x + g.b.x) / 2, my = (g.a.y + g.b.y) / 2;
+    if (horiz) o.push(`<text class="${cls}x" x="${X(mx)}" y="${Y(my + 95)}">${esc(text)}</text>`);
+    else o.push(`<text class="${cls}x" x="${X(mx - 95)}" y="${Y(my)}" transform="rotate(-90 ${X(mx - 95)} ${Y(my)})">${esc(text)}</text>`);
+  }
+
   // 房間名稱與面積
   for (const r of rooms) {
     const m2 = toM2(r.area);
     o.push(`<text class="rn" x="${X(r.centroid.x)}" y="${Y(r.centroid.y + 130)}">${esc(r.name)}</text>`);
-    o.push(`<text class="ra" x="${X(r.centroid.x)}" y="${Y(r.centroid.y - 190)}">${fmt(m2, 2)} m² · ${fmt(toPing(m2), 2)} 坪</text>`);
+    o.push(`<text class="ra" x="${X(r.centroid.x)}" y="${Y(r.centroid.y - 130)}">${fmt(m2, 2)} m² · ${fmt(toPing(m2), 2)} 坪</text>`);
+    o.push(`<text class="ra" x="${X(r.centroid.x)}" y="${Y(r.centroid.y - 330)}">H=${esc(fmtLen(floor.height || 2800, unit))} ${unit}</text>`);
   }
   for (const t of floor.texts) o.push(`<text class="note" x="${X(t.x)}" y="${Y(t.y)}">${esc(t.text)}</text>`);
 

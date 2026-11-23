@@ -3,6 +3,7 @@ import * as G from './geometry.js';
 import * as WL from './wall.js';
 import { flatten, SYMBOLS } from './catalog.js';
 import { fmtLen, getUnit, toM2, toPing, fmt } from './util.js';
+import { outerDims, dimSegments } from './autodim.js';
 
 const LAYERS = [
   ['WALL', 7], ['WALL-EXT', 8], ['WALL-CENTER', 253], ['ROOM', 4],
@@ -214,6 +215,18 @@ export function buildDXF(floor, rooms, opt = {}) {
     let rotDeg = G.deg(G.angleOf(dir));
     if (rotDeg > 90 || rotDeg < -90) rotDeg += 180;
     d.text('DIM', G.add(G.lerp(a, b, .5), G.mul(G.leftN(dir), 80)), fmtLen(G.dist(dm.a, dm.b), unit), 150, rotDeg);
+  }
+
+  // 外圍尺寸鏈：內層每一段、外層總長
+  for (const g of dimSegments(outerDims(floor, WL.mitreMap(floor.walls)), 480, 900)) {
+    const horiz = g.side === 'top' || g.side === 'bottom';
+    d.line('DIM', g.a, g.b); d.line('DIM', g.ea, g.a); d.line('DIM', g.eb, g.b);
+    for (const p of [g.a, g.b]) d.line('DIM', { x: p.x - 45, y: p.y - 45 }, { x: p.x + 45, y: p.y + 45 });
+    const text = fmtLen(g.len, unit);
+    if (g.len < text.length * 85) continue;
+    const mx = (g.a.x + g.b.x) / 2, my = (g.a.y + g.b.y) / 2;
+    if (horiz) d.text('DIM', { x: mx, y: my + 95 }, text, g.tier === 2 ? 140 : 120, 0);
+    else d.text('DIM', { x: mx - 95, y: my }, text, g.tier === 2 ? 140 : 120, 90);
   }
 
   // 註記

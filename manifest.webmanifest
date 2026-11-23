@@ -1,18 +1,18 @@
 {
-  "name": "丈量APP — 藍牙測距量房平台",
-  "short_name": "丈量APP",
+  "name": "菩語丈量 — 藍牙測距量房平台",
+  "short_name": "菩語丈量",
   "description": "搭配藍牙雷射測距儀的現場量房與平面圖繪製工具，支援自動面積統計與 CAD 匯出。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#12161d",
-  "theme_color": "#12161d",
+  "background_color": "#141414",
+  "theme_color": "#141414",
   "lang": "zh-Hant-TW",
   "categories": ["productivity", "utilities", "business"],
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%232e7cf6'/%3E%3Cpath d='M104 336h304M104 336v-64M408 336v-64M180 336v-40M256 336v-64M332 336v-40' stroke='white' stroke-width='28' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='168' r='26' fill='white'/%3E%3C/svg%3E",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%231a1a1a'/%3E%3Cpath d='M104 336h304M104 336v-64M408 336v-64M180 336v-40M256 336v-64M332 336v-40' stroke='%23c9a96e' stroke-width='28' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='168' r='26' fill='%23c9a96e'/%3E%3C/svg%3E",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"

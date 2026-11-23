@@ -15,6 +15,7 @@ import { buildSVG } from './export-svg.js';
 import { buildDAE, buildDAEAll, daeStats } from './export-dae.js';
 import { floorSchedule, scheduleTable, scheduleCSV, openingTable } from './report.js';
 import { render3d } from './view3d.js';
+import { createWalk } from './walk3d.js';
 
 /* ── 啟動 ───────────────────────────── */
 const meter = new Meter();
@@ -49,9 +50,12 @@ async function boot() {
   ed.addEventListener('pending', updateDock);
   ed.addEventListener('photoplace', (e) => capturePhoto(e.detail));
   ed.addEventListener('deleteroom', (e) => confirmRoomDelete(e.detail));
+  ed.addEventListener('stats', syncUnderlay);
+  ed.addEventListener('pick', (e) => onPick(e.detail));
 
   ed.gridStep = DB.pref.get('gridStep', 100);
   ed.tracking = DB.pref.get('tracking', true);
+  ed.autoDims = DB.pref.get('autoDims', true);
   ed.precision = DB.pref.get('precision', 5);
   ed.addEventListener('polar', () => { $('#stSnap').textContent = polarStatus(); });
   wireTopbar(); wireToolbar(); wireStage(); wireKeys(); wireMeter(); wireDock();
@@ -132,6 +136,7 @@ function openMoreMenu() {
       item('面積報表', '各區域淨面積、坪數、牆面與工程量', openReport),
       item('風水評測', '八宅／二十四山，民俗參考', openFengshui),
       item('3D 空間簡圖', '即時體塊模型，可旋轉存圖', open3d),
+      item('走動視角', '站進房間裡走一圈，看牆、窗、樑的實際高度感', openWalk),
       item('雲端同步 / 分享', '上傳專案、產生給業主看的連結', openCloud),
       item('匯出', 'DXF / DAE / SVG / PNG / CSV / 列印', openExport),
       item('現場照片', '本專案所有照片與標註', openPhotoGallery),
@@ -143,9 +148,9 @@ function openMoreMenu() {
 }
 
 function openGestureHelp() {
-  const row2 = (g, d) => el('div', { class: 'kv', style: 'padding:8px 0;border-bottom:1px solid #2f3947;align-items:flex-start' },
-    el('span', { style: 'color:#e8edf4;font-weight:600;min-width:96px' }, g),
-    el('b', { style: 'font-weight:400;color:#98a4b5;text-align:right;flex:1' }, d));
+  const row2 = (g, d) => el('div', { class: 'kv', style: 'padding:8px 0;border-bottom:1px solid #3a3632;align-items:flex-start' },
+    el('span', { style: 'color:#f3efe8;font-weight:600;min-width:96px' }, g),
+    el('b', { style: 'font-weight:400;color:#b3aa9c;text-align:right;flex:1' }, d));
   modal({
     size: 'sm', title: '操作手勢',
     body: el('div', {},
@@ -198,6 +203,13 @@ function wireStage() {
   $('#btnZoomOut').onclick = () => ed.zoomAt(ed.W / 2, ed.H / 2, 1 / 1.25);
   $('#btnFit').onclick = () => ed.fit();
   $('#btnGrid').onclick = (e) => { ed.showGrid = !ed.showGrid; e.currentTarget.classList.toggle('on', ed.showGrid); ed.render(); };
+  $('#btnDims').onclick = (e) => {
+    ed.autoDims = !ed.autoDims;
+    DB.pref.set('autoDims', ed.autoDims);
+    e.currentTarget.classList.toggle('on', ed.autoDims);
+    ed.render();
+  };
+  $('#btnDims').classList.toggle('on', ed.autoDims);
   $('#btnOrtho').onclick = (e) => { ed.ortho = !ed.ortho; e.currentTarget.classList.toggle('on', ed.ortho); updateSnapStatus(); };
   $('#btnTrack').onclick = (e) => {
     ed.tracking = !ed.tracking;
@@ -520,7 +532,8 @@ function itemPanel(it) {
       row(isStair ? '寬度' : '寬', numInput(it.w, (v) => { const n = parseFloat(v); if (n > 0) upd(() => { it.w = n; }, '構件寬'); }), el('span', { class: 'unit' }, 'mm')),
       row(isStair ? '長度' : '深', numInput(it.h, (v) => { const n = parseFloat(v); if (n > 0) upd(() => { it.h = n; }, '構件深'); }), el('span', { class: 'unit' }, 'mm')),
       isStair ? null : row('高', numInput(it.h3d, (v) => { const n = parseFloat(v); if (n >= 0) upd(() => { it.h3d = n; }, '構件高'); }), el('span', { class: 'unit' }, 'mm')),
-      def ? el('button', { class: 'btn-w', onclick: () => upd(() => { it.w = def.w; it.h = def.h; it.h3d = def.h3d; if (isStair) { it.steps = def.steps; it.runW = def.runW; } }, '還原尺寸') }, '還原預設尺寸') : null,
+      it.z != null ? row('離地高', numInput(it.z, (v) => { const n = parseFloat(v); if (n >= 0) upd(() => { it.z = n; }, '離地高'); }), el('span', { class: 'unit' }, 'mm')) : null,
+      def ? el('button', { class: 'btn-w', onclick: () => upd(() => { it.w = def.w; it.h = def.h; it.h3d = def.h3d; if (def.z != null) it.z = def.z; if (isStair) { it.steps = def.steps; it.runW = def.runW; } }, '還原尺寸') }, '還原預設尺寸') : null,
     ),
     isStair ? stairGroup(it, def) : null,
     el('div', { class: 'grp' },
@@ -579,6 +592,7 @@ function floorPanel() {
       el('div', { class: 'kv' }, el('span', {}, '家具構件'), el('b', {}, String(f.items?.length || 0))),
       el('div', { class: 'kv' }, el('span', {}, '現場照片'), el('b', {}, String(f.photos?.length || 0))),
     ),
+    underlayGroup(),
     el('div', { class: 'grp' },
       el('h4', {}, '業主資料'),
       row('姓名', numInput(doc.p.client.name, (v) => { doc.p.client.name = v; markDirty(); })),
@@ -592,6 +606,115 @@ function floorPanel() {
     ),
     el('button', { class: 'btn-w', onclick: openReport }, '開啟面積報表'),
     el('button', { class: 'btn-w', onclick: openPhotoGallery }, '現場照片總覽'),
+  );
+}
+
+/* ── 臨摹底圖 ─────────────────────────
+   把建商平面圖、舊圖或手繪草圖的照片墊在圖面下方照著描。
+   圖檔跟現場照片放同一個 store，樓層只記 id、位置與寬度（mm）。 */
+async function syncUnderlay() {
+  const id = doc.floor.underlay?.photoId || null;
+  if (id === ed.underlayFor) return;
+  ed.underlayFor = id; ed.underlayImg = null;
+  if (!id) { ed.render(); return; }
+  const url = await PH.objectURL(id);
+  if (!url || ed.underlayFor !== id) return;
+  const img = new Image();
+  img.onload = () => { if (ed.underlayFor === id) { ed.underlayImg = img; ed.render(); } };
+  img.src = url;
+}
+
+function pickImageFile() {
+  return new Promise((res) => {
+    const inp = el('input', { type: 'file', accept: 'image/*' });
+    inp.onchange = () => res(inp.files?.[0] || null);
+    inp.click();
+  });
+}
+
+async function importUnderlay() {
+  const file = await pickImageFile();
+  if (!file) return;
+  let rec;
+  try { rec = await PH.ingest(file); } catch { return toast('這個檔案讀不出來，請改用 JPG 或 PNG 圖片', 'bad', 3500); }
+  await DB.savePhoto(rec);
+  // 先擺在目前畫面正中央、佔六成寬；真正的大小靠「校正比例」決定
+  const c = ed.toModel(ed.W / 2, ed.H / 2);
+  const w = ed.mm(ed.W * 0.6);
+  upd(() => {
+    doc.floor.underlay = { photoId: rec.id, cx: c.x, cy: c.y, w, ratio: rec.h / rec.w, opacity: 0.5, visible: true };
+  }, '匯入底圖');
+  toast('底圖已匯入。下一步請按「校正比例」，在圖上點一段已知長度', 'ok', 4500);
+}
+
+function startUnderlayPick(kind) {
+  $('#inspector').classList.remove('open');
+  ed.startPick(kind);
+  $('#hintChip').textContent = kind === 'calib'
+    ? '校正比例：在底圖上點一段已知長度的兩端（例如一面牆的頭尾）；右鍵或 Esc 取消'
+    : '移動底圖：先點底圖上的一個點，再點它應該在的位置；右鍵或 Esc 取消';
+}
+
+function onPick(pk) {
+  updateHint();
+  const u = doc.floor.underlay;
+  if (!pk || !u) return;
+  const [p1, p2] = pk.pts;
+  if (pk.kind === 'move') {
+    upd(() => { u.cx += p2.x - p1.x; u.cy += p2.y - p1.y; }, '移動底圖');
+    return;
+  }
+  const d = G.dist(p1, p2);
+  if (d < 1) return toast('兩個點太近了，請重新點', 'bad');
+  const inp = el('input', { inputmode: 'decimal', placeholder: `實際長度 (${getUnit()})`, style: 'width:100%;height:40px;font-size:16px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg3)' });
+  const apply = () => {
+    const real = parseLen(inp.value);
+    if (!(real > 0)) return toast('請輸入這一段的實際長度', 'bad');
+    const k = real / d;
+    closeModal();
+    // 以第一個點為基準放大縮小，點過的那個位置不會跑掉
+    upd(() => { u.w *= k; u.cx = p1.x + (u.cx - p1.x) * k; u.cy = p1.y + (u.cy - p1.y) * k; }, '校正底圖比例');
+    ed.fit();
+    toast('比例已校正，可以照著底圖畫牆了', 'ok', 3000);
+  };
+  inp.onkeydown = (e) => { if (e.key === 'Enter') apply(); };
+  modal({
+    size: 'sm', title: '校正底圖比例',
+    body: el('div', {},
+      el('div', { class: 'note', style: 'margin-bottom:10px' }, '剛剛點的那一段，實際上是多長？'),
+      inp),
+    footer: [
+      el('button', { class: 'tb', onclick: () => closeModal() }, '取消'),
+      el('button', { class: 'md-btn', onclick: apply }, '套用'),
+    ],
+  });
+  setTimeout(() => inp.focus(), 60);
+}
+
+function underlayGroup() {
+  const u = doc.floor.underlay;
+  if (!u) {
+    return el('div', { class: 'grp' },
+      el('h4', {}, '臨摹底圖'),
+      el('button', { class: 'btn-w', style: 'margin:0', onclick: importUnderlay }, '匯入底圖照著描'),
+      el('div', { class: 'md-foot' }, el('span', {}, '建商平面圖、舊圖或手繪草圖的照片都可以。匯入後墊在圖面下方，校正比例就能照著畫牆。')),
+    );
+  }
+  const op = el('input', { type: 'range', min: 10, max: 100, step: 5, value: Math.round((u.opacity ?? 0.5) * 100), style: 'flex:1' });
+  op.oninput = () => { u.opacity = op.value / 100; ed.render(); markDirty(); };
+  return el('div', { class: 'grp' },
+    el('h4', {}, '臨摹底圖'),
+    el('div', { class: 'row' },
+      el('label', {}, '顯示'),
+      el('input', { type: 'checkbox', checked: u.visible !== false, onchange: (e) => { u.visible = e.target.checked; ed.render(); markDirty(); } })),
+    el('div', { class: 'row' }, el('label', {}, '透明度'), op),
+    el('div', { class: 'kv' }, el('span', {}, '圖面寬度'), el('b', {}, `${fmtLen(u.w)} ${getUnit()}`)),
+    el('button', { class: 'btn-w', onclick: () => startUnderlayPick('calib') }, '校正比例（點兩點＋輸入長度）'),
+    el('button', { class: 'btn-w', onclick: () => startUnderlayPick('move') }, '移動底圖（點兩點）'),
+    el('div', { class: 'row' },
+      el('button', { class: 'btn-w', style: 'margin:0', onclick: importUnderlay }, '更換'),
+      el('button', { class: 'btn-w danger', style: 'margin:0', onclick: () => upd(() => { delete doc.floor.underlay; }, '移除底圖') }, '移除'),
+    ),
   );
 }
 
@@ -1106,7 +1229,7 @@ function wireMeter() {
         el('div', { class: 'note' },
           '這台測距儀不在內建機種清單裡，程式從連續幾包資料推出了距離欄位。', el('br'), el('br'),
           el('b', {}, '最近幾筆解讀為：'), el('br'),
-          el('b', { style: 'font-size:17px;color:#4d94ff' }, vals)),
+          el('b', { style: 'font-size:17px;color:#dcc08a' }, vals)),
         el('div', { class: 'note warn' }, '請對照測距儀螢幕上的數字。相同就按「正確」，不同請用學習模式輸入實際值。'),
       ),
       footer: [
@@ -1123,9 +1246,9 @@ function blockNotice() {
   if (!b) return null;
   const box = el('div', { class: 'note warn' },
     el('b', {}, b.title), el('br'),
-    el('span', { style: 'color:#98a4b5' }, b.why), el('br'), el('br'),
+    el('span', { style: 'color:#b3aa9c' }, b.why), el('br'), el('br'),
     el('b', {}, '怎麼做：'), el('br'),
-    el('span', { style: 'color:#98a4b5' }, b.fix));
+    el('span', { style: 'color:#b3aa9c' }, b.fix));
   if (b.code === 'ios') {
     box.append(el('div', { class: 'row', style: 'margin-top:10px' },
       el('button', {
@@ -1152,13 +1275,13 @@ function deviceMapBlock() {
   }
   const box = el('div', { class: 'grp' }, el('h4', {}, '裝置結構'));
   for (const s of meter.map) {
-    box.append(el('div', { class: 'kv', style: 'border-top:1px solid #2f3947;padding-top:6px;margin-top:6px' },
-      el('span', { style: 'color:#98a4b5' }, '服務'),
+    box.append(el('div', { class: 'kv', style: 'border-top:1px solid #3a3632;padding-top:6px;margin-top:6px' },
+      el('span', { style: 'color:#b3aa9c' }, '服務'),
       el('b', { style: 'font-family:ui-monospace,monospace;font-size:11px' }, s.uuid.slice(4, 8).toUpperCase())));
     for (const c of s.chars) {
       box.append(el('div', { class: 'kv', style: 'padding-left:10px' },
         el('span', { style: 'font-family:ui-monospace,monospace;font-size:11px' }, c.uuid.slice(4, 8).toUpperCase()),
-        el('b', { style: `font-size:11px;font-weight:500;color:${c.subscribed ? '#8ff0c4' : '#68748a'}` },
+        el('b', { style: `font-size:11px;font-weight:500;color:${c.subscribed ? '#8ff0c4' : '#7d766b'}` },
           c.flags.join(' · ') + (c.subscribed ? '　✓已訂閱' : ''))));
     }
   }
@@ -1176,7 +1299,7 @@ function openBle() {
     stepBox.replaceChildren(...(meter.steps.length
       ? meter.steps.map((s) => el('div', { style: `color:${s.ok ? '#9fd3a8' : '#ff9b9b'}` },
         `${new Date(s.t).toLocaleTimeString('zh-TW')}  ${s.msg}`))
-      : [el('div', { style: 'color:#68748a' }, '（尚未嘗試連線）')]));
+      : [el('div', { style: 'color:#7d766b' }, '（尚未嘗試連線）')]));
     stepBox.scrollTop = stepBox.scrollHeight;
   };
   drawSteps();
@@ -1448,18 +1571,18 @@ function openReport() {
   });
   const body = el('div', {});
   for (const { floor, sch } of all) {
-    body.append(el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#98a4b5' }, `【${floor.name}】樓高 ${floor.height} mm`));
+    body.append(el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#b3aa9c' }, `【${floor.name}】樓高 ${floor.height} mm`));
     body.append(scheduleTable(sch));
   }
   const grand = all.reduce((s, x) => s + x.sch.sum.area, 0);
   body.append(el('div', { class: 'note', style: 'margin-top:16px' },
     el('b', {}, '全案合計：'), `室內淨面積 ${fmt(grand, 2)} m²（${fmt(toPing(grand), 2)} 坪）· 共 ${doc.p.floors.length} 層`));
-  body.append(el('h4', { style: 'margin:18px 0 8px;font-size:13px;color:#98a4b5' }, '本層門窗清單'));
+  body.append(el('h4', { style: 'margin:18px 0 8px;font-size:13px;color:#b3aa9c' }, '本層門窗清單'));
   body.append(openingTable(doc.floor));
 
   const photos = doc.p.floors.flatMap((f) => (f.photos || []).map((ph) => ({ f, ph })));
   if (photos.length) {
-    body.append(el('h4', { style: 'margin:18px 0 8px;font-size:13px;color:#98a4b5' }, `現場照片（${photos.length} 張）`));
+    body.append(el('h4', { style: 'margin:18px 0 8px;font-size:13px;color:#b3aa9c' }, `現場照片（${photos.length} 張）`));
     const grid = el('div', { class: 'ph-grid' });
     photos.forEach(({ f, ph }, i) => {
       const card = el('button', { class: 'ph-card', onclick: () => PH.openViewer(ph, { meter, onChange: () => doc.commit('照片標註'), title: ph.name || '現場照片' }) },
@@ -1505,7 +1628,7 @@ async function openCloud() {
     const TXT = {
       ok: ['已連線', '#8ff0c4'],
       auth: ['需要存取權杖', '#ffd591'],
-      static: ['此網站沒有後端（靜態託管）', '#98a4b5'],
+      static: ['此網站沒有後端（靜態託管）', '#b3aa9c'],
       offline: ['連不上伺服器', '#ffb3b3'],
     }[st];
     status.querySelector('b').textContent = TXT[0];
@@ -1673,7 +1796,7 @@ function openFengshui() {
     );
   };
 
-  const lc = (l) => (l === 'good' ? '#2ec27e' : l === 'bad' ? '#f04a4a' : '#98a4b5');
+  const lc = (l) => (l === 'good' ? '#2ec27e' : l === 'bad' ? '#f04a4a' : '#b3aa9c');
 
   const resultBlock = (res) => {
     const tbl = el('table', { class: 'tbl' });
@@ -1686,7 +1809,7 @@ function openFengshui() {
         el('td', { style: `color:${lc(s.luck)};font-weight:600` }, s.star),
         el('td', {}, `${s.starName}·${s.wx}`),
         el('td', { style: `color:${lc(s.luck)};font-weight:600` }, s.rank),
-        el('td', { style: 'color:#98a4b5;font-size:12px' }, s.use),
+        el('td', { style: 'color:#b3aa9c;font-size:12px' }, s.use),
       ));
     }
     tbl.append(tb);
@@ -1732,9 +1855,9 @@ function openFengshui() {
           el('b', {}, res.study ? `${res.study.gua}方${res.study.inCenter ? '（入中，寄巽）' : ''}` : '—')),
         res.wenchangYear?.gua ? el('div', { class: 'kv' }, el('span', {}, `${res.year} 流年文昌`), el('b', {}, `${res.wenchangYear.gua}方`)) : null,
       ),
-      el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#98a4b5' }, '八方位吉凶'),
+      el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#b3aa9c' }, '八方位吉凶'),
       tbl,
-      el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#98a4b5' }, '各房間所在方位'),
+      el('h4', { style: 'margin:16px 0 8px;font-size:13px;color:#b3aa9c' }, '各房間所在方位'),
       rt,
       el('div', { class: 'grp', style: 'margin-top:14px' },
         el('h4', {}, '屋主命卦（選填）'),
@@ -1774,6 +1897,7 @@ function open3d() {
       el('div', { class: 'note', style: 'margin-top:10px' }, '依牆體、門窗高度即時生成的體塊模型。可用「匯出 → DXF」帶進 AutoCAD / SketchUp 續作。'),
     ),
     footer: [
+      el('button', { class: 'tb', onclick: () => { closeModal(); setTimeout(openWalk, 60); } }, '走進去看'),
       el('button', { class: 'tb', onclick: () => cv.toBlob((b) => download(`${doc.p.name}_${doc.floor.name}_3D.png`, b, 'image/png')) }, '存成圖片'),
       el('button', { class: 'md-btn', onclick: () => closeModal() }, '關閉'),
     ],
@@ -1784,6 +1908,38 @@ function open3d() {
   cv.addEventListener('pointermove', (e) => { if (drag == null) return; view.rotY += (e.clientX - drag) * 0.008; drag = e.clientX; draw(); });
   cv.addEventListener('pointerup', () => { drag = null; });
   new ResizeObserver(draw).observe(m);
+}
+
+/* ── 走動視角 ─────────────────────────── */
+function openWalk() {
+  if (!doc.floor.walls.length) return toast('請先畫牆，才有房間可以走進去', 'bad', 3000);
+  const cv = el('canvas', { tabindex: 0, style: 'width:100%;height:100%;display:block;border-radius:8px;touch-action:none;outline:none;cursor:grab' });
+  const map = el('canvas', { class: 'walk-map', title: '點一下就走到那裡' });
+  const pad = (label, f, t, title) => {
+    const b = el('button', { class: 'walk-key', title }, label);
+    const on = (e) => { e.preventDefault(); walk.hold(f, t); b.classList.add('on'); };
+    const off = () => { walk.hold(0, 0); b.classList.remove('on'); };
+    b.addEventListener('pointerdown', on);
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, off);
+    return b;
+  };
+  const wrap = el('div', { class: 'walk-wrap' }, cv, map);
+  const walk = createWalk(cv, map, doc.floor, ed.rooms);
+  if (!walk.ok) return toast('這個瀏覽器不支援 3D 顯示（WebGL），無法使用走動視角', 'bad', 4000);
+  wrap.append(el('div', { class: 'walk-pad' },
+    pad('↶', 0, 1, '左轉'), pad('▲', 1, 0, '前進'), pad('↷', 0, -1, '右轉'), pad('▼', -1, 0, '後退')));
+  modal({
+    title: '走動視角 — ' + doc.floor.name,
+    size: 'lg',
+    body: el('div', {}, wrap,
+      el('div', { class: 'note', style: 'margin-top:10px' },
+        '拖曳畫面轉頭；方向鍵或 W A S D 走動、Q E 轉身，滾輪前進後退。手機用右下角的按鈕。點右上角小地圖可以直接走到那個位置。視線高度 150 cm。')),
+    footer: [
+      el('button', { class: 'tb', onclick: () => cv.toBlob((b) => download(`${doc.p.name}_${doc.floor.name}_走動視角.png`, b, 'image/png')) }, '存成圖片'),
+      el('button', { class: 'md-btn', onclick: () => closeModal() }, '關閉'),
+    ],
+    onClose: () => walk.destroy(),
+  });
 }
 
 /* ── 匯出 ───────────────────────────── */

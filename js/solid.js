@@ -1,6 +1,7 @@
 // solid.js — 由平面圖產生 3D 體塊（3D 預覽與 DAE 匯出共用同一份幾何）
 import * as G from './geometry.js';
 import * as WL from './wall.js';
+import { SYMBOLS } from './catalog.js';
 
 /**
  * 乾淨牆體：轉角斜接不重疊、門窗只留孔洞、不含門片窗框。
@@ -144,9 +145,15 @@ export function solidsOf(floor) {
     if (hh <= 0) continue;
     const cs = Math.cos(it.rot || 0), sn = Math.sin(it.rot || 0);
     const T = (x, y) => ({ x: it.x + x * cs - y * sn, y: it.y + x * sn + y * cs });
+    // 貼牆的面板類（插座、開關…）：平面上的符號比實物大，3D 改用實際厚度，
+    // 貼在符號的背面（+y 側，也就是牆面），並抬到離地高度。
+    const d3 = SYMBOLS[it.type]?.d3d;
+    const y0 = d3 ? it.h / 2 - d3 : -it.h / 2;
+    const hw = d3 && it.w <= 300 ? 45 : it.w / 2;
+    const z0 = Math.max(0, it.z || 0);
     out.push({
-      quad: [T(-it.w / 2, -it.h / 2), T(it.w / 2, -it.h / 2), T(it.w / 2, it.h / 2), T(-it.w / 2, it.h / 2)],
-      z0: 0, z1: hh, kind: 'item', ext: false, name: it.label || it.type,
+      quad: [T(-hw, y0), T(hw, y0), T(hw, it.h / 2), T(-hw, it.h / 2)],
+      z0, z1: z0 + hh, kind: 'item', ext: false, name: it.label || it.type,
     });
   }
 
