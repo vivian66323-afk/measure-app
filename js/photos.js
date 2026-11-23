@@ -12,7 +12,7 @@ const THUMB_EDGE = 240;
 const JPEG_Q = 0.82;
 
 /** 讀圖 → 縮圖 → 產生主圖 Blob 與縮圖 dataURL */
-export async function ingest(file) {
+export async function ingest(file, maxEdge = MAX_EDGE) {
   const bmp = await createImageBitmap(file);
   const draw = (edge) => {
     const k = Math.min(1, edge / Math.max(bmp.width, bmp.height));
@@ -22,7 +22,7 @@ export async function ingest(file) {
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     return c;
   };
-  const main = draw(MAX_EDGE);
+  const main = draw(maxEdge);
   const blob = await new Promise((r) => main.toBlob(r, 'image/jpeg', JPEG_Q));
   const thumb = draw(THUMB_EDGE).toDataURL('image/jpeg', 0.7);
   bmp.close?.();

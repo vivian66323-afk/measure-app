@@ -1,7 +1,8 @@
 // sw.js — 離線快取（量房現場常常沒有網路）
-const CACHE = '丈量app-v3';
+const CACHE = '丈量app-v4';
 const ASSETS = [
   './', './index.html', './share.html', './manifest.webmanifest', './css/app.css', './img/logo-puyu.png',
+  './lib/pdfjs/pdf.min.mjs', './lib/pdfjs/pdf.worker.min.mjs',
   './js/app.js', './js/util.js', './js/geometry.js', './js/model.js', './js/store.js',
   './js/editor.js', './js/rooms.js', './js/ble.js', './js/catalog.js', './js/photos.js',
   './js/fengshui.js', './js/sync.js', './js/share.js', './js/solid.js', './js/wall.js',

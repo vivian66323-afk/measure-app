@@ -39,6 +39,7 @@ async function boot() {
 
   ed = new Editor($('#cv'), doc);
   window.ed = ed; window.doc = doc; window.meter = meter;      // 除錯用
+  window.importUnderlay = importUnderlay;
 
   doc.addEventListener('change', () => { markDirty(); ed.recompute(); });
   ed.addEventListener('select', () => { renderInspector(); updateSideBtn(); });
@@ -626,17 +627,24 @@ async function syncUnderlay() {
 
 function pickImageFile() {
   return new Promise((res) => {
-    const inp = el('input', { type: 'file', accept: 'image/*' });
+    const inp = el('input', { type: 'file', accept: 'image/*,application/pdf,.pdf' });
     inp.onchange = () => res(inp.files?.[0] || null);
     inp.click();
   });
 }
 
-async function importUnderlay() {
-  const file = await pickImageFile();
+async function importUnderlay(given) {
+  // 按鈕點擊時 given 是事件物件；直接傳檔案進來（測試、拖放）才跳過選檔視窗
+  let file = given instanceof Blob ? given : await pickImageFile();
   if (!file) return;
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  if (isPdf) {
+    try { file = await pdfPageToImage(file); }
+    catch (err) { return toast('這個 PDF 讀不出來：' + (err?.message || err), 'bad', 5000); }
+    if (!file) return;                       // 使用者在選頁時按了取消
+  }
   let rec;
-  try { rec = await PH.ingest(file); } catch { return toast('這個檔案讀不出來，請改用 JPG 或 PNG 圖片', 'bad', 3500); }
+  try { rec = await PH.ingest(file, 3200); } catch { return toast('這個檔案讀不出來，請改用 JPG、PNG 或 PDF', 'bad', 3500); }
   await DB.savePhoto(rec);
   // 先擺在目前畫面正中央、佔六成寬；真正的大小靠「校正比例」決定
   const c = ed.toModel(ed.W / 2, ed.H / 2);
@@ -645,6 +653,53 @@ async function importUnderlay() {
     doc.floor.underlay = { photoId: rec.id, cx: c.x, cy: c.y, w, ratio: rec.h / rec.w, opacity: 0.5, visible: true };
   }, '匯入底圖');
   toast('底圖已匯入。下一步請按「校正比例」，在圖上點一段已知長度', 'ok', 4500);
+}
+
+/**
+ * 把 PDF 的某一頁轉成圖片（PNG Blob）。
+ * pdf.js 有 1.7 MB，只有真的選到 PDF 才載入，平常不拖慢啟動。
+ * 多頁的 PDF 會先問要用哪一頁；回傳 null 代表使用者取消。
+ */
+async function pdfPageToImage(file) {
+  toast('正在讀取 PDF…', '', 1500);
+  const pdfjs = await import('../lib/pdfjs/pdf.min.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('../lib/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  try {
+    let n = 1;
+    if (pdf.numPages > 1) {
+      n = await new Promise((res) => {
+        const sel = el('select', { style: 'width:100%;height:40px;font-size:16px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg3)' },
+          ...Array.from({ length: pdf.numPages }, (_, i) => el('option', { value: i + 1 }, `第 ${i + 1} 頁`)));
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; res(v); closeModal(); };
+        modal({
+          size: 'sm', title: '選擇要當底圖的頁面',
+          body: el('div', {},
+            el('div', { class: 'note', style: 'margin-bottom:10px' }, `這份 PDF 共有 ${pdf.numPages} 頁，一次只能用一頁當底圖。`),
+            sel),
+          footer: [
+            el('button', { class: 'tb', onclick: () => fin(null) }, '取消'),
+            el('button', { class: 'md-btn', onclick: () => fin(+sel.value) }, '使用這一頁'),
+          ],
+          onClose: () => { if (!done) { done = true; res(null); } },
+        });
+      });
+      if (!n) return null;
+    }
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    // 最長邊轉成約 3200 像素：細線還看得清楚，檔案也不會太大
+    const vp = page.getViewport({ scale: Math.min(6, 3200 / Math.max(base.width, base.height)) });
+    const cv = el('canvas');
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);      // PDF 底色是透明的，轉 JPEG 會變黑
+    await page.render({ canvasContext: g, viewport: vp }).promise;
+    return await new Promise((r) => cv.toBlob(r, 'image/png'));
+  } finally {
+    pdf.destroy?.();
+  }
 }
 
 function startUnderlayPick(kind) {
@@ -696,8 +751,8 @@ function underlayGroup() {
   if (!u) {
     return el('div', { class: 'grp' },
       el('h4', {}, '臨摹底圖'),
-      el('button', { class: 'btn-w', style: 'margin:0', onclick: importUnderlay }, '匯入底圖照著描'),
-      el('div', { class: 'md-foot' }, el('span', {}, '建商平面圖、舊圖或手繪草圖的照片都可以。匯入後墊在圖面下方，校正比例就能照著畫牆。')),
+      el('button', { class: 'btn-w', style: 'margin:0', onclick: importUnderlay }, '匯入底圖照著描（圖片或 PDF）'),
+      el('div', { class: 'md-foot' }, el('span', {}, '建商平面圖、舊圖、手繪草圖的照片，或 PDF 圖檔都可以。匯入後墊在圖面下方，校正比例就能照著畫牆。')),
     );
   }
   const op = el('input', { type: 'range', min: 10, max: 100, step: 5, value: Math.round((u.opacity ?? 0.5) * 100), style: 'flex:1' });
