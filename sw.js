@@ -1,5 +1,5 @@
 // sw.js — 離線快取（量房現場常常沒有網路）
-const CACHE = '丈量app-v5';
+const CACHE = '丈量app-v6';
 const ASSETS = [
   './', './index.html', './share.html', './manifest.webmanifest', './css/app.css', './img/logo-puyu.png',
   './lib/pdfjs/pdf.min.mjs', './lib/pdfjs/pdf.worker.min.mjs',

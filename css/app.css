@@ -662,3 +662,6 @@ input[type=checkbox],input[type=range],input[type=radio]{accent-color:var(--acce
   .dim-pill{top:52px}
   .topbar .spacer{flex:1 1 0}
 }
+
+.vs,.fab-done,.sp-btn{white-space:nowrap}
+@media (max-width:420px){.hud-left{display:none}}
